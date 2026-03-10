@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="fire" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF4500"/>
+      <stop offset="50%" style="stop-color:#FF8C00"/>
+      <stop offset="100%" style="stop-color:#FFD700"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#fire)" d="M50 5C50 5 20 35 20 60c0 16.57 13.43 30 30 30s30-13.43 30-30C80 35 50 5 50 5zm0 50c-5.52 0-10 4.48-10 10s4.48 10 10 10 10-4.48 10-10c0-5.52-5-15-10-20-5 5-10 14.48-10 20z"/>
+</svg>
