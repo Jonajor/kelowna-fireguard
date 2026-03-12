@@ -41,6 +41,7 @@ export async function analyzeText(text) {
   return fetchJSON("/analyze/text", { method: "POST", body: JSON.stringify({ text }) });
 }
 export async function getDashboardStats() { return fetchJSON("/dashboard/stats"); }
+export async function getEvacuations() { return fetchJSON("/evacuations"); }
 
 export function createWebSocket(onMessage, onError) {
   let ws = null, reconnectTimer = null, attempts = 0;

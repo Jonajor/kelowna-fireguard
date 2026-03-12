@@ -128,6 +128,25 @@ class NASAHotspot(Base):
     )
 
 
+class EvacuationZone(Base):
+    __tablename__ = "evacuation_zones"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    external_id = Column(String(128), unique=True, nullable=True, index=True)
+    event_name = Column(String(256), nullable=False)
+    event_number = Column(String(32), nullable=True)
+    event_type = Column(String(64), nullable=True)
+    order_alert_status = Column(String(32), nullable=False)
+    issuing_agency = Column(String(256), nullable=True)
+    homes_affected = Column(Integer, nullable=True)
+    population_affected = Column(Integer, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    event_start_date = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    collected_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

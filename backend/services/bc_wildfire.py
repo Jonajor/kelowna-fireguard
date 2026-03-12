@@ -22,7 +22,7 @@ async def collect_bc_wildfire_data() -> dict:
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             params = {
-                "where": "1=1",
+                "where": "FIRE_STATUS <> 'Out'",
                 "geometry": (
                     f'{{"xmin":{settings.BBOX_WEST},'
                     f'"ymin":{settings.BBOX_SOUTH},'
@@ -34,7 +34,7 @@ async def collect_bc_wildfire_data() -> dict:
                 "spatialRel": "esriSpatialRelIntersects",
                 "outFields": (
                     "FIRE_NUMBER,FIRE_YEAR,FIRE_CAUSE,"
-                    "FIRE_STATUS,FIRE_SIZE_HECTARES,"
+                    "FIRE_STATUS,CURRENT_SIZE,"
                     "GEOGRAPHIC_DESCRIPTION,LATITUDE,LONGITUDE,"
                     "FIRE_URL,IGNITION_DATE,FIRE_OF_NOTE_IND,OBJECTID"
                 ),
@@ -60,7 +60,7 @@ async def collect_bc_wildfire_data() -> dict:
                     continue
 
                 external_id = f"bcws_{fire_number}"
-                size_ha = attrs.get("FIRE_SIZE_HECTARES") or 0
+                size_ha = attrs.get("CURRENT_SIZE") or 0
                 status_raw = (attrs.get("FIRE_STATUS") or "Active").strip()
                 geographic_desc = attrs.get("GEOGRAPHIC_DESCRIPTION") or "Unknown"
 

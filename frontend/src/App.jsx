@@ -1,7 +1,8 @@
 /**
  * KelownaFireGuard — Main Dashboard
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap, useMapEvents } from "react-leaflet";
 import { usePolledData } from "./hooks/usePolledData";
 import {
   getIncidents,
@@ -13,6 +14,7 @@ import {
   analyzeText,
   createWebSocket,
   getHotspots,
+  getEvacuations,
 } from "./api/client";
 
 const KELOWNA = { lat: 49.888, lng: -119.496 };
@@ -27,6 +29,12 @@ const STATUS_COLORS = {
   monitoring: "#FFD700",
   contained: "#4ADE80",
 };
+const EVAC_COLORS = {
+  "Order": "#FF2D2D",
+  "Alert": "#FF8C00",
+  "Tactical Evacuation": "#FFD700",
+};
+
 const PLATFORM_COLORS = {
   Reddit: "#FF5700",
   "Castanet Kelowna": "#E63946",
@@ -299,81 +307,131 @@ function AIPanel({ riskData }) {
   );
 }
 
-function MapView({ incidents, hotspots, selected, onSelect }) {
-  const bounds = { minLat: 49.60, maxLat: 50.15, minLng: -119.90, maxLng: -119.10 };
-  const toXY = (lat, lng) => ({
-    x: ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100,
-    y: ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * 100,
-  });
+function FlyToSelected({ selected }) {
+  const map = useMap();
+  useEffect(() => {
+    if (selected?.latitude && selected?.longitude) {
+      map.flyTo([selected.latitude, selected.longitude], 13, { duration: 1 });
+    }
+  }, [selected, map]);
+  return null;
+}
+
+function LocationMarker({ position }) {
+  if (!position) return null;
+  return (
+    <CircleMarker
+      center={position}
+      radius={8}
+      pathOptions={{ color: "#4ADE80", fillColor: "#4ADE80", fillOpacity: 0.9, weight: 3 }}
+    >
+      <Popup>
+        <div style={{ fontFamily: "monospace", fontSize: 11 }}>
+          <strong style={{ color: "#4ADE80" }}>Your Location</strong><br />
+          {position[0].toFixed(5)}°N, {Math.abs(position[1]).toFixed(5)}°W
+        </div>
+      </Popup>
+    </CircleMarker>
+  );
+}
+
+function MapView({ incidents, hotspots, evacuations, selected, onSelect, userLocation }) {
   const allIncidents = incidents || [];
   const allHotspots = hotspots || [];
+  const allEvacuations = (evacuations || []).filter(e => e.latitude && e.longitude);
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative", background: "#080A0E" }}>
-      <svg width="100%" height="100%" style={{ position: "absolute", opacity: 0.06 }}>
-        {Array.from({ length: 20 }).map((_, i) => (
-          <line key={`h${i}`} x1="0" y1={`${i * 5}%`} x2="100%" y2={`${i * 5}%`} stroke="#fff" strokeWidth="0.5" />
-        ))}
-        {Array.from({ length: 20 }).map((_, i) => (
-          <line key={`v${i}`} x1={`${i * 5}%`} y1="0" x2={`${i * 5}%`} y2="100%" stroke="#fff" strokeWidth="0.5" />
-        ))}
-      </svg>
-      <svg width="100%" height="100%" style={{ position: "absolute", opacity: 0.08 }}>
-        <path d="M 35,10 Q 33,25 32,40 Q 31,50 30,60 Q 29,70 28,80 Q 27,87 26,95" fill="none" stroke="#1E90FF" strokeWidth="12" strokeLinecap="round" opacity="0.5" />
-        <text x="28%" y="50%" fill="#1E90FF" fontSize="9" opacity="0.6" fontFamily="var(--font-mono)">Okanagan Lake</text>
-      </svg>
-      <div style={{ position: "absolute", left: "42%", top: "38%", color: "rgba(255,255,255,0.12)", fontSize: 28, fontWeight: 800, letterSpacing: 6, textTransform: "uppercase", fontFamily: "var(--font-display)", pointerEvents: "none" }}>
-        KELOWNA
-      </div>
-      {allHotspots.map((h, i) => {
-        const pos = toXY(h.latitude, h.longitude);
+    <MapContainer
+      center={[KELOWNA.lat, KELOWNA.lng]}
+      zoom={10}
+      style={{ width: "100%", height: "100%" }}
+      zoomControl={true}
+    >
+      <TileLayer
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        maxZoom={19}
+        className="map-tiles-dark"
+      />
+      <FlyToSelected selected={selected} />
+
+      {allHotspots.map((h, i) => (
+        <CircleMarker
+          key={`hs-${i}`}
+          center={[h.latitude, h.longitude]}
+          radius={5}
+          pathOptions={{ color: "#FFA500", fillColor: "#FFA500", fillOpacity: 0.6, weight: 1 }}
+        >
+          <Popup>
+            <div style={{ fontFamily: "monospace", fontSize: 11 }}>
+              <strong style={{ color: "#FFA500" }}>Satellite Hotspot</strong><br />
+              Brightness: {h.brightness?.toFixed(1)} K<br />
+              Confidence: {h.confidence}<br />
+              FRP: {h.frp?.toFixed(1)} MW<br />
+              {h.acq_date} {h.acq_time}
+            </div>
+          </Popup>
+        </CircleMarker>
+      ))}
+
+      {allEvacuations.map((evac) => {
+        const color = EVAC_COLORS[evac.status] || "#FFD700";
         return (
-          <div key={`hs-${i}`} style={{ position: "absolute", left: `${pos.x}%`, top: `${pos.y}%`, width: 6, height: 6, borderRadius: "50%", background: "rgba(255,165,0,0.6)", border: "1px solid rgba(255,165,0,0.3)", transform: "translate(-50%, -50%)", pointerEvents: "none" }} />
+          <CircleMarker
+            key={evac.id}
+            center={[evac.latitude, evac.longitude]}
+            radius={14}
+            pathOptions={{ color, fillColor: color, fillOpacity: 0.25, weight: 2.5, dashArray: "6 4" }}
+          >
+            <Popup>
+              <div style={{ fontFamily: "monospace", fontSize: 11, minWidth: 180 }}>
+                <strong style={{ color }}>{evac.status?.toUpperCase()}</strong>
+                {" — "}{evac.event_name}<br />
+                Type: {evac.event_type}<br />
+                Agency: {evac.issuing_agency}<br />
+                {evac.homes_affected != null && <>Homes: {evac.homes_affected}<br /></>}
+                {evac.population_affected != null && <>People: {evac.population_affected}<br /></>}
+                {evac.event_start_date && <>Since: {new Date(evac.event_start_date).toLocaleDateString()}</>}
+              </div>
+            </Popup>
+          </CircleMarker>
         );
       })}
+
       {allIncidents.map((inc) => {
-        const pos = toXY(inc.latitude, inc.longitude);
         const color = THREAT_COLORS[inc.threat_level] || "#6B7280";
         const isSel = selected?.id === inc.id;
-        const isActive = inc.status === "active";
+        const radius = isSel ? 12 : inc.status === "active" ? 10 : 7;
         return (
-          <div key={inc.id} onClick={() => onSelect(isSel ? null : inc)} style={{ position: "absolute", left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%, -50%)", cursor: "pointer", zIndex: isSel ? 50 : 10 }}>
-            {isActive && (
-              <>
-                <div style={{ position: "absolute", left: "50%", top: "50%", width: 40, height: 40, borderRadius: "50%", border: `2px solid ${color}`, transform: "translate(-50%, -50%)", animation: "pulseRing 2s infinite", opacity: 0.4 }} />
-                <div style={{ position: "absolute", left: "50%", top: "50%", width: 40, height: 40, borderRadius: "50%", border: `2px solid ${color}`, transform: "translate(-50%, -50%)", animation: "pulseRing 2s infinite 0.6s", opacity: 0.3 }} />
-              </>
-            )}
-            <div style={{ width: isSel ? 18 : 14, height: isSel ? 18 : 14, borderRadius: "50%", background: `radial-gradient(circle, ${color}, ${color}88)`, border: `2px solid ${isSel ? "#fff" : color}`, boxShadow: `0 0 ${isSel ? 20 : 12}px ${color}66`, transition: "all 0.3s" }} />
-            {isSel && (
-              <div style={{ position: "absolute", top: "-44px", left: "50%", transform: "translateX(-50%)", background: "rgba(13,15,20,0.95)", border: `1px solid ${color}44`, borderRadius: 6, padding: "6px 10px", whiteSpace: "nowrap", animation: "slideIn 0.2s ease" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color }}>{inc.name}</div>
-                <div style={{ fontSize: 8, color: "#6B7280" }}>{(inc.size_hectares || 0).toFixed(1)} ha • {(inc.containment_pct || 0).toFixed(0)}% contained</div>
+          <CircleMarker
+            key={inc.id}
+            center={[inc.latitude, inc.longitude]}
+            radius={radius}
+            pathOptions={{
+              color: color,
+              fillColor: color,
+              fillOpacity: isSel ? 0.9 : 0.7,
+              weight: isSel ? 3 : 1.5,
+            }}
+            eventHandlers={{ click: () => onSelect(isSel ? null : inc) }}
+          >
+            <Popup>
+              <div style={{ fontFamily: "monospace", fontSize: 11, minWidth: 160 }}>
+                <strong style={{ color }}>{inc.name}</strong><br />
+                <span style={{ color: STATUS_COLORS[inc.status] || "#fff" }}>{(inc.status || "").toUpperCase()}</span>
+                {" • "}<ThreatBadge level={inc.threat_level} /><br />
+                Size: {(inc.size_hectares || 0).toFixed(2)} ha<br />
+                Containment: {(inc.containment_pct || 0).toFixed(0)}%<br />
+                {inc.fire_number && <>ID: {inc.fire_number}<br /></>}
+                {inc.fire_cause && <>Cause: {inc.fire_cause}<br /></>}
+                Source: {inc.source}
               </div>
-            )}
-          </div>
+            </Popup>
+          </CircleMarker>
         );
       })}
-      <div style={{ position: "absolute", bottom: 16, left: 16, background: "rgba(13,15,20,0.9)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: "10px 14px", backdropFilter: "blur(8px)" }}>
-        <div style={{ fontSize: 8, fontWeight: 700, color: "#6B7280", letterSpacing: 1.5, marginBottom: 8, textTransform: "uppercase" }}>Threat Level</div>
-        {Object.entries(THREAT_COLORS).map(([key, color]) => (
-          <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
-            <span style={{ fontSize: 9, color: "#9CA3AF" }}>{key}</span>
-          </div>
-        ))}
-        {allHotspots.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, paddingTop: 4, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "rgba(255,165,0,0.6)" }} />
-            <span style={{ fontSize: 9, color: "#9CA3AF" }}>Satellite hotspot</span>
-          </div>
-        )}
-      </div>
-      <div style={{ position: "absolute", bottom: 16, right: 16, background: "rgba(13,15,20,0.9)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, padding: "6px 10px", fontSize: 9, color: "#4B5563" }}>
-        {KELOWNA.lat.toFixed(4)}°N, {Math.abs(KELOWNA.lng).toFixed(4)}°W • {allIncidents.length} incidents • {allHotspots.length} hotspots
-      </div>
-      <div style={{ position: "absolute", left: 0, width: "100%", height: "2px", background: "linear-gradient(90deg, transparent, rgba(255,69,0,0.08), transparent)", animation: "scanline 8s linear infinite", pointerEvents: "none" }} />
-    </div>
+      <LocationMarker position={userLocation} />
+    </MapContainer>
   );
 }
 
@@ -383,6 +441,7 @@ export default function App() {
   const [rightTab, setRightTab] = useState("social");
   const [time, setTime] = useState(new Date());
   const [wsConnected, setWsConnected] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
 
   const { data: statsData } = usePolledData(getDashboardStats, 15000);
   const { data: incidentsData, loading: incLoading } = usePolledData(getIncidents, 30000);
@@ -397,10 +456,21 @@ export default function App() {
   const { data: hotspotsData } = usePolledData(
     useCallback(() => getHotspots({ hours: 48 }), []), 60000
   );
+  const { data: evacuationsData } = usePolledData(getEvacuations, 60000);
 
   useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => setUserLocation([pos.coords.latitude, pos.coords.longitude]),
+      () => {},
+      { enableHighAccuracy: true }
+    );
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
   useEffect(() => {
@@ -415,6 +485,7 @@ export default function App() {
   const alerts = alertsData?.alerts || [];
   const socialPosts = socialData?.posts || [];
   const hotspots = hotspotsData?.hotspots || [];
+  const evacuations = evacuationsData?.evacuations || [];
   const stats = statsData || {};
 
   return (
@@ -466,12 +537,36 @@ export default function App() {
         <div style={{ background: "var(--bg-secondary)", overflow: "auto" }}>
           <div style={{ padding: "14px 16px 10px", display: "flex", gap: 4, borderBottom: "1px solid var(--border)", position: "sticky", top: 0, background: "var(--bg-secondary)", zIndex: 10 }}>
             <TabButton label="ALERTS" active={leftTab === "alerts"} onClick={() => setLeftTab("alerts")} count={alerts.length} />
+            <TabButton label="EVAC" active={leftTab === "evac"} onClick={() => setLeftTab("evac")} count={evacuations.length} />
             <TabButton label="INCIDENTS" active={leftTab === "incidents"} onClick={() => setLeftTab("incidents")} count={incidents.length} />
           </div>
           {leftTab === "incidents"
             ? incLoading ? <LoadingDots />
               : incidents.length === 0 ? <EmptyState message="No active incidents detected in the Kelowna region." />
               : incidents.map((inc) => <IncidentCard key={inc.id} incident={inc} selected={selectedIncident?.id === inc.id} onClick={() => setSelectedIncident(selectedIncident?.id === inc.id ? null : inc)} />)
+            : leftTab === "evac"
+            ? evacuations.length === 0
+              ? <EmptyState message="No active evacuation orders or alerts in the region." />
+              : evacuations.map((evac) => {
+                  const color = EVAC_COLORS[evac.status] || "#FFD700";
+                  return (
+                    <div key={evac.id} style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.03)", borderLeft: `3px solid ${color}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color }}>{evac.status?.toUpperCase()}</span>
+                        <span style={{ fontSize: 9, color: "#6B7280" }}>{evac.event_type}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#E8EAED", marginBottom: 4 }}>{evac.event_name}</div>
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{evac.issuing_agency}</div>
+                      {(evac.homes_affected || evac.population_affected) && (
+                        <div style={{ fontSize: 9, color: "#6B7280", marginTop: 4 }}>
+                          {evac.homes_affected != null && `${evac.homes_affected} homes`}
+                          {evac.homes_affected && evac.population_affected ? " • " : ""}
+                          {evac.population_affected != null && `${evac.population_affected} people`}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
             : alertLoading ? <LoadingDots />
               : alerts.length === 0 ? <EmptyState message="No alerts in the last 24 hours. System is monitoring." />
               : alerts.map((a) => <AlertCard key={a.id} alert={a} />)
@@ -479,7 +574,7 @@ export default function App() {
         </div>
 
         <div style={{ background: "#080A0E", position: "relative", overflow: "hidden" }}>
-          <MapView incidents={incidents} hotspots={hotspots} selected={selectedIncident} onSelect={setSelectedIncident} />
+          <MapView incidents={incidents} hotspots={hotspots} evacuations={evacuations} selected={selectedIncident} onSelect={setSelectedIncident} userLocation={userLocation} />
         </div>
 
         <div style={{ background: "var(--bg-secondary)", overflow: "auto", borderLeft: "1px solid var(--border)" }}>

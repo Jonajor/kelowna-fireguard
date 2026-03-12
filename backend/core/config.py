@@ -3,7 +3,11 @@ Configuration — all API endpoints, thresholds, and settings.
 """
 
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+# .env lives at the project root, one level above backend/
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -26,6 +30,14 @@ class Settings(BaseSettings):
     BBOX_SOUTH: float = float(os.getenv("BBOX_SOUTH", "49.60"))
     BBOX_WEST: float = float(os.getenv("BBOX_WEST", "-119.90"))
     BBOX_EAST: float = float(os.getenv("BBOX_EAST", "-119.10"))
+
+    # BC Evacuation Orders & Alerts — Public ArcGIS REST (NO auth)
+    BC_EVACUATION_URL: str = (
+        "https://services6.arcgis.com/ubm4tcTYICKBpist/"
+        "arcgis/rest/services/Evacuation_Orders_and_Alerts/"
+        "FeatureServer/0/query"
+    )
+    INTERVAL_EVACUATION: int = 300
 
     # BC Wildfire Service — Public ArcGIS REST (NO auth)
     BC_WILDFIRE_ACTIVE_URL: str = (
@@ -83,8 +95,9 @@ class Settings(BaseSettings):
     INTERVAL_AI_ANALYSIS: int = 300
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_FILE)
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = Settings()

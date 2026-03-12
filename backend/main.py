@@ -23,6 +23,7 @@ from services.nasa_firms import collect_nasa_firms_data
 from services.weather import collect_weather_data
 from services.social_scanner import scan_social_media
 from services.alert_engine import run_ai_analysis
+from services.evacuation import collect_evacuation_data
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -61,6 +62,11 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(
         scan_social_media, "interval",
         seconds=settings.INTERVAL_SOCIAL, id="social_scan",
+        next_run_time=datetime.utcnow(),
+    )
+    scheduler.add_job(
+        collect_evacuation_data, "interval",
+        seconds=settings.INTERVAL_EVACUATION, id="evacuation",
         next_run_time=datetime.utcnow(),
     )
     scheduler.add_job(

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import settings
 from core.database import (
     get_session, Incident, Alert, SocialPost,
-    WeatherReading, NASAHotspot,
+    WeatherReading, NASAHotspot, EvacuationZone,
 )
 from services.nlp_engine import NLPEngine
 from api.websocket import manager
@@ -161,6 +161,32 @@ async def get_hotspots(
          "confidence": h.confidence, "frp": h.frp, "satellite": h.satellite,
          "acq_date": h.acq_date, "acq_time": h.acq_time, "daynight": h.daynight}
         for h in hotspots
+    ]}
+
+
+@router.get("/evacuations")
+async def get_evacuations(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(
+        select(EvacuationZone).where(EvacuationZone.is_active == True)
+        .order_by(desc(EvacuationZone.collected_at))
+    )
+    zones = result.scalars().all()
+    return {"count": len(zones), "evacuations": [
+        {
+            "id": z.id,
+            "external_id": z.external_id,
+            "event_name": z.event_name,
+            "event_number": z.event_number,
+            "event_type": z.event_type,
+            "status": z.order_alert_status,
+            "issuing_agency": z.issuing_agency,
+            "homes_affected": z.homes_affected,
+            "population_affected": z.population_affected,
+            "latitude": z.latitude,
+            "longitude": z.longitude,
+            "event_start_date": z.event_start_date.isoformat() if z.event_start_date else None,
+        }
+        for z in zones
     ]}
 
 
