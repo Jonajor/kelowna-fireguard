@@ -24,6 +24,7 @@ from services.weather import collect_weather_data
 from services.social_scanner import scan_social_media
 from services.alert_engine import run_ai_analysis
 from services.evacuation import collect_evacuation_data
+from services.reddit_poster import run_reddit_poster
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -73,6 +74,10 @@ async def lifespan(app: FastAPI):
         run_ai_analysis, "interval",
         seconds=settings.INTERVAL_AI_ANALYSIS, id="ai_analysis",
     )
+    scheduler.add_job(
+        run_reddit_poster, "interval",
+        seconds=settings.INTERVAL_REDDIT_POSTER, id="reddit_poster",
+    )
 
     scheduler.start()
     logger.info("Background collectors started")
@@ -119,4 +124,5 @@ async def health():
         "collectors": jobs,
         "nasa_firms_key": "configured" if settings.NASA_FIRMS_KEY != "DEMO_KEY" else "DEMO_KEY",
         "openweather_key": "configured" if settings.OPENWEATHER_API_KEY else "not set",
+        "reddit_poster": "configured" if settings.REDDIT_CLIENT_ID else "not configured",
     }

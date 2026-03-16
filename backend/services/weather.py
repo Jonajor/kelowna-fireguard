@@ -5,7 +5,8 @@ Secondary: OpenWeatherMap (free tier, 1000/day) for AQI/UV
 """
 
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from xml.etree import ElementTree
 
 import httpx
@@ -77,8 +78,22 @@ async def collect_weather_data() -> dict:
 
 
 async def _fetch_environment_canada():
+    # New EC format (post June 2025): files are in hourly UTC subdirectories
+    hour = datetime.now(timezone.utc).strftime("%H")
+    dir_url = f"{settings.EC_CITYPAGE_BASE_URL}/{hour}/"
+
     async with httpx.AsyncClient(timeout=20.0) as client:
-        resp = await client.get(settings.EC_FORECAST_CITY_URL)
+        listing = await client.get(dir_url)
+        listing.raise_for_status()
+
+        # Find the latest _en.xml file for this station
+        pattern = rf'href="([^"]*{re.escape(settings.EC_STATION_ID)}_en\.xml)"'
+        matches = re.findall(pattern, listing.text)
+        if not matches:
+            raise ValueError(f"No EC file found for station {settings.EC_STATION_ID} in {dir_url}")
+        latest_file = matches[-1]  # last = most recent timestamp
+
+        resp = await client.get(f"{dir_url}{latest_file}")
         resp.raise_for_status()
 
     root = ElementTree.fromstring(resp.content)

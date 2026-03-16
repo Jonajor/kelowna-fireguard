@@ -57,19 +57,31 @@ class Settings(BaseSettings):
     NASA_FIRMS_SOURCE: str = "VIIRS_SNPP_NRT"
 
     # Environment Canada — Public (NO auth)
-    EC_STATION_ID: str = "CXKL"
-    EC_FORECAST_CITY_URL: str = (
-        "https://dd.weather.gc.ca/citypage_weather/xml/BC/s0000568_e.xml"
-    )
+    # Station s0000592 = Kelowna (s0000568 was Kamloops — wrong)
+    # New URL format (post June 2025): timestamped files under hourly UTC directories
+    EC_STATION_ID: str = "s0000592"
+    EC_CITYPAGE_BASE_URL: str = "https://dd.weather.gc.ca/today/citypage_weather/BC"
 
     # OpenWeatherMap — optional, free tier 1000/day
     OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "")
     OPENWEATHER_BASE_URL: str = "https://api.openweathermap.org/data/2.5"
     OPENWEATHER_AQI_URL: str = "https://api.openweathermap.org/data/2.5/air_pollution"
 
-    # Reddit — public JSON, no auth for read-only
+    # Reddit — public JSON for read-only monitoring
     REDDIT_USER_AGENT: str = "KelownaFireGuard/1.0 (fire monitoring bot)"
     REDDIT_SUBREDDITS: list[str] = ["kelowna", "britishcolumbia", "okanagan"]
+
+    # Reddit — OAuth credentials for posting (script-type app)
+    # Create your app at: https://www.reddit.com/prefs/apps
+    REDDIT_CLIENT_ID: str = os.getenv("REDDIT_CLIENT_ID", "")
+    REDDIT_CLIENT_SECRET: str = os.getenv("REDDIT_CLIENT_SECRET", "")
+    REDDIT_USERNAME: str = os.getenv("REDDIT_USERNAME", "")
+    REDDIT_PASSWORD: str = os.getenv("REDDIT_PASSWORD", "")
+    REDDIT_BOT_USER_AGENT: str = os.getenv(
+        "REDDIT_BOT_USER_AGENT",
+        "KelownaFireGuard/1.0 by u/YOUR_USERNAME (wildfire monitoring bot)",
+    )
+    INTERVAL_REDDIT_POSTER: int = int(os.getenv("INTERVAL_REDDIT_POSTER", "300"))  # 5 min
 
     # RSS News Feeds
     NEWS_FEEDS: list[dict] = [

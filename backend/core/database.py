@@ -147,6 +147,18 @@ class EvacuationZone(Base):
     collected_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
+class RedditPost(Base):
+    __tablename__ = "reddit_posts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    subreddit = Column(String(64), nullable=False)
+    event_key = Column(String(256), nullable=False, unique=True, index=True)
+    title = Column(String(512), nullable=False)
+    body = Column(Text, nullable=False)
+    reddit_post_id = Column(String(32), nullable=True)  # filled after successful post
+    posted_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
